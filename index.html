@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkGuard | KIB-53 — Аудит публичных ссылок</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --accent:#58a6ff; --red:#f85149; --orange:#f0883e;
+    --yellow:#e3b341; --green:#3fb950;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:0 20px}
+  header{border-bottom:1px solid var(--border);padding:28px 0}
+  .team{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:30px;margin:6px 0 4px}
+  .sub{color:var(--muted)}
+  section{padding:34px 0;border-bottom:1px solid var(--border)}
+  h2{font-size:22px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px}
+  #drop{border:2px dashed var(--border);border-radius:10px;padding:34px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s}
+  #drop.over{border-color:var(--accent);color:var(--accent);background:#12233a}
+  .btns{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap}
+  button{background:#21262d;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 18px;font-size:15px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04121f;font-weight:600}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:18px}
+  .metric{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+  .metric b{display:block;font-size:28px}
+  .metric span{font-size:13px;color:var(--muted)}
+  .b-crit b{color:var(--red)} .b-high b{color:var(--orange)} .b-med b{color:var(--yellow)}
+  .bar-row{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:14px}
+  .bar{height:18px;border-radius:4px;min-width:2px}
+  .filters{display:flex;gap:16px;margin:0 0 14px;flex-wrap:wrap;font-size:15px}
+  .filters label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+  .crit{background:#f8514922;color:var(--red);border:1px solid var(--red)}
+  .high{background:#f0883e22;color:var(--orange);border:1px solid var(--orange)}
+  .med{background:#e3b34122;color:var(--yellow);border:1px solid var(--yellow)}
+  .rule-id{color:var(--muted);font-size:12px}
+  .warn{background:#e3b34111;border:1px solid #e3b34155;border-radius:8px;padding:12px 16px;margin-top:14px;font-size:14px}
+  .ok{background:#3fb95011;border:1px solid #3fb95055;border-radius:8px;padding:14px 16px;color:var(--green)}
+  .hidden{display:none!important}
+  .note{color:var(--muted);font-size:14px;margin-top:12px}
+  .rules td:first-child{font-weight:700;white-space:nowrap}
+  footer{padding:26px 0;color:var(--muted);font-size:13px}
+  code{background:#21262d;padding:2px 6px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <div class="team">KIB-53 · Кибербезопасность × управление доступом</div>
+  <h1>🛡️ LinkGuard — аудит публичных ссылок на корпоративные документы</h1>
+  <p class="sub">Локальный аудитор реестра ссылок для маркетинговой студии (5–30 человек). Только синтетические данные:
+  приложение не открывает ссылки, не обращается к API и ничего никуда не отправляет — анализ выполняется в вашем браузере.</p>
+</div></header>
+
+<section><div class="wrap">
+  <h2>1. Загрузка реестра</h2>
+  <div id="drop">
+    <p><b>Перетащите сюда файл .csv или .json</b><br>или нажмите, чтобы выбрать файл</p>
+    <input type="file" id="file" accept=".csv,.json" class="hidden">
+  </div>
+  <div class="btns">
+    <button id="demoBtn" class="primary">▶️ Запустить на демо-данных</button>
+    <button id="exportBtn" class="hidden">⬇️ Скачать отчёт (CSV)</button>
+  </div>
+  <p class="note">Ожидаемые колонки: <code>document_name, category, owner, confidentiality, access_type, permissions, has_expiration, project_status</code></p>
+  <div id="alerts"></div>
+</div></section>
+
+<section id="dashSec" class="hidden"><div class="wrap">
+  <h2>2. Дашборд</h2>
+  <div class="metrics">
+    <div class="metric"><b id="mDocs">0</b><span>проверено документов</span></div>
+    <div class="metric"><b id="mFind">0</b><span>найдено нарушений</span></div>
+    <div class="metric b-crit"><b id="mCrit">0</b><span>🔴 критических</span></div>
+    <div class="metric b-high"><b id="mHigh">0</b><span>🟠 высоких</span></div>
+    <div class="metric b-med"><b id="mMed">0</b><span>🟡 средних</span></div>
+  </div>
+  <div class="card" style="margin-top:14px" id="chart"></div>
+</div></section>
+
+<section id="tableSec" class="hidden"><div class="wrap">
+  <h2>3. Найденные нарушения</h2>
+  <div class="filters">
+    <label><input type="checkbox" checked data-risk="Критический"> 🔴 Критический</label>
+    <label><input type="checkbox" checked data-risk="Высокий"> 🟠 Высокий</label>
+    <label><input type="checkbox" checked data-risk="Средний"> 🟡 Средний</label>
+  </div>
+  <div id="tableBox"></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>4. Движок правил</h2>
+  <div class="card">
+    <table class="rules">
+      <tr><th>Правило</th><th>Условие</th><th>Риск</th><th>Рекомендация</th></tr>
+      <tr><td>R1</td><td>access_type = «Публичный» и конфиденциальность «Конфиденциальный» / «Строго конфиденциальный»</td><td><span class="badge crit">Критический</span></td><td>Сменить тип доступа на «Внутренний», отозвать публичную ссылку</td></tr>
+      <tr><td>R2</td><td>permissions = «Редактирование» и доступ «Публичный» / «Внешний»</td><td><span class="badge high">Высокий</span></td><td>Снизить права до «Просмотр» либо закрыть доступ</td></tr>
+      <tr><td>R3</td><td>access_type = «Внешний» и нет срока действия ссылки</td><td><span class="badge med">Средний</span></td><td>Установить срок действия ссылки (7–30 дней)</td></tr>
+      <tr><td>R4</td><td>project_status = «Завершен», доступ не «Внутренний»</td><td><span class="badge med">Средний</span></td><td>Отозвать ссылку, перевести документ в архив</td></tr>
+    </table>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>5. Ограничения и безопасность</h2>
+  <div class="card">
+    <p>Учебный MVP на синтетических данных. Ссылки из реестра <b>не открываются и не проверяются</b>, сетевых запросов нет,
+    права доступа к реальным системам не изменяются. Обработка ошибок: неверный формат файла, отсутствие обязательных колонок
+    и пустые значения (NaN) не приводят к сбою — выводится понятное сообщение, строка исключается из затронутых проверок с предупреждением.</p>
+    <p class="note">Демо: нажмите «Запустить на демо-данных» — ожидается 4 нарушения. Готовый тестовый набор (10 документов, 7 нарушений: R1×2, R2×2, R3×2, R4×1)
+    — в репозитории <code>test_data.csv</code>.</p>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  LinkGuard · команда KIB-53 · учебный проект по дисциплине «Безопасность предпринимательской деятельности»
+</div></footer>
+
+<script>
+"use strict";
+/* ================= LinkGuard — клиентский движок аудита ================= */
+
+const REQUIRED = ["document_name","category","owner","confidentiality","access_type","permissions","has_expiration","project_status"];
+const RISK_RANK = {"Критический":0, "Высокий":1, "Средний":2};
+const TRUE_TOKENS = ["true","да","yes","1","истина"], FALSE_TOKENS = ["false","нет","no","0","ложь"];
+
+/* --- CSV-парсер: автоопределение разделителя (; или ,), поддержка кавычек --- */
+function parseCSV(text){
+  const firstLine = text.split(/\r?\n/,1)[0] || "";
+  const delim = ((firstLine.match(/;/g)||[]).length >= (firstLine.match(/,/g)||[]).length) ? ";" : ",";
+  const rows = []; let row = [], field = "", inQ = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQ){
+      if(c === '"'){ if(text[i+1] === '"'){field+='"';i++;} else inQ=false; }
+      else field += c;
+    } else if(c === '"') inQ = true;
+    else if(c === delim){ row.push(field); field=""; }
+    else if(c === "\n" || c === "\r"){
+      if(c === "\r" && text[i+1] === "\n") i++;
+      row.push(field); field="";
+      if(row.length > 1 || row[0] !== "") rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  row.push(field);
+  if(row.length > 1 || row[0] !== "") rows.push(row);
+  if(rows.length < 2) throw new Error("Файл не содержит данных");
+  const header = rows[0].map(h => h.trim().replace(/^\uFEFF/,""));
+  return rows.slice(1).map(r => Object.fromEntries(header.map((h,i) => [h, (r[i] ?? "").trim()])));
+}
+
+/* --- Нормализация has_expiration: Да/Нет, True/False, 1/0 --- */
+function normExp(v){
+  if(v === null || v === undefined) return null;
+  if(typeof v === "boolean") return v;
+  const t = String(v).trim().toLowerCase();
+  if(t === "" || t === "nan") return null;
+  if(TRUE_TOKENS.includes(t)) return true;
+  if(FALSE_TOKENS.includes(t)) return false;
+  return null;
+}
+
+/* --- Движок правил R1–R4 (зеркало серверной версии на Python) --- */
+function runAudit(rows){
+  const findings = [], warnings = [];
+  rows.forEach((row, idx) => {
+    const doc = (row.document_name || "").trim() || `строка ${idx+1}`;
+    const conf = (row.confidentiality || "").trim();
+    const access = (row.access_type || "").trim();
+    const perm = (row.permissions || "").trim();
+    const status = (row.project_status || "").trim();
+    const exp = normExp(row.has_expiration);
+    const common = {document_name: doc, category: row.category||"", owner: row.owner||""};
+
+    ["confidentiality","access_type","permissions","project_status"].forEach(f => {
+      const v = String(row[f] ?? "").trim().toLowerCase();
+      if(!v || v === "nan") warnings.push({doc, field:f, msg:`Пустое значение в поле '${f}' — строка пропущена в проверках, требующих это поле.`});
+    });
+    if(exp === null) warnings.push({doc, field:"has_expiration",
+      msg:"Не распознано значение has_expiration (ожидается Да/Нет или True/False) — Правило 3 не применялось."});
+
+    if(access === "Публичный" && ["Конфиденциальный","Строго конфиденциальный"].includes(conf))
+      findings.push({...common, rule:"R1", reason:`Публичная ссылка на документ с уровнем конфиденциальности «${conf}»`,
+        risk:"Критический", rec:"Немедленно сменить тип доступа на «Внутренний» и отозвать публичную ссылку"});
+
+    if(perm === "Редактирование" && ["Публичный","Внешний"].includes(access))
+      findings.push({...common, rule:"R2", reason:`Права «${perm}» по ссылке с типом доступа «${access}»`,
+        risk:"Высокий", rec:"Снизить права до «Просмотр» либо сменить тип доступа на «Внутренний»"});
+
+    if(access === "Внешний" && exp === false)
+      findings.push({...common, rule:"R3", reason:"Внешняя ссылка без ограничения срока действия",
+        risk:"Средний", rec:"Установить срок действия ссылки (7–30 дней) и дату автоматического отзыва"});
+
+    if(status === "Завершен" && access !== "Внутренний")
+      findings.push({...common, rule:"R4", reason:`Проект завершён, но ссылка остаётся «${access}» (избыточный доступ)`,
+        risk:"Средний", rec:"Отозвать ссылку или перевести документ в архив с внутренним доступом"});
+  });
+  findings.sort((a,b) => RISK_RANK[a.risk]-RISK_RANK[b.risk] || a.document_name.localeCompare(b.document_name,"ru"));
+  return {findings, warnings};
+}
+
+/* ================= UI ================= */
+let currentFindings = [];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function alertBox(html, cls="warn"){ $("alerts").innerHTML = `<div class="${cls}">${html}</div>`; }
+
+function handleRows(rows){
+  $("alerts").innerHTML = "";
+  const miss = REQUIRED.filter(c => !(c in (rows[0] || {})));
+  if(miss.length){
+    alertBox(`⚠️ В файле отсутствуют обязательные колонки: <b>${miss.map(c=>`<code>${c}</code>`).join(", ")}</b>. Ожидаемая схема: ${REQUIRED.join(", ")}`);
+    $("dashSec").classList.add("hidden"); $("tableSec").classList.add("hidden"); $("exportBtn").classList.add("hidden");
+    return;
+  }
+  const {findings, warnings} = runAudit(rows);
+  currentFindings = findings;
+
+  $("dashSec").classList.remove("hidden"); $("tableSec").classList.remove("hidden");
+  const cnt = r => findings.filter(f => f.risk === r).length;
+  $("mDocs").textContent = rows.length;
+  $("mFind").textContent = findings.length;
+  $("mCrit").textContent = cnt("Критический");
+  $("mHigh").textContent = cnt("Высокий");
+  $("mMed").textContent = cnt("Средний");
+
+  const max = Math.max(cnt("Критический"), cnt("Высокий"), cnt("Средний"), 1);
+  const colors = {"Критический":"var(--red)","Высокий":"var(--orange)","Средний":"var(--yellow)"};
+  $("chart").innerHTML = ["Критический","Высокий","Средний"].map(r =>
+    `<div class="bar-row"><span style="width:110px">${r}</span>
+     <div class="bar" style="width:${cnt(r)/max*100}%;background:${colors[r]}"></div><span>${cnt(r)}</span></div>`).join("");
+
+  renderTable();
+  const warnHtml = warnings.length ? `<div class="warn">⚠️ Предупреждения по данным (${warnings.length}):<br>` +
+    warnings.map(w => `• <b>${esc(w.doc)}</b> — ${esc(w.msg)}`).join("<br>") + `</div>` : "";
+  alertBox(warnHtml || (findings.length ? "" : `<div class="ok">✅ Нарушений не обнаружено. Реестр соответствует правилам.</div>`));
+  $("exportBtn").classList.toggle("hidden", !findings.length);
+}
+
+function renderTable(){
+  const active = [...document.querySelectorAll(".filters input")].filter(i => i.checked).map(i => i.dataset.risk);
+  const rows = currentFindings.filter(f => active.includes(f.risk));
+  const badge = {"Критический":"crit","Высокий":"high","Средний":"med"};
+  $("tableBox").innerHTML = rows.length ? `<div class="card"><table>
+    <tr><th>Документ</th><th>Категория</th><th>Владелец</th><th>Правило</th><th>Причина</th><th>Риск</th><th>Рекомендация</th></tr>
+    ${rows.map(f => `<tr><td><b>${esc(f.document_name)}</b></td><td>${esc(f.category)}</td><td>${esc(f.owner)}</td>
+      <td class="rule-id">${f.rule}</td><td>${esc(f.reason)}</td>
+      <td><span class="badge ${badge[f.risk]}">${f.risk}</span></td><td>${esc(f.rec)}</td></tr>`).join("")}
+    </table></div>` : `<div class="ok">По выбранным уровням риска нарушений нет.</div>`;
+}
+
+document.querySelectorAll(".filters input").forEach(i => i.addEventListener("change", renderTable));
+
+/* --- Загрузка файла --- */
+$("drop").addEventListener("click", () => $("file").click());
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => {e.preventDefault(); $("drop").classList.add("over");}));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => {e.preventDefault(); $("drop").classList.remove("over");}));
+$("drop").addEventListener("drop", e => readFile(e.dataTransfer.files[0]));
+$("file").addEventListener("change", e => readFile(e.target.files[0]));
+
+function readFile(file){
+  if(!file) return;
+  if(!/\.(csv|json)$/i.test(file.name)){
+    alertBox(`⚠️ Неподдерживаемый формат файла: <b>${esc(file.name)}</b>. Ожидается .csv или .json.`); return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const text = reader.result;
+      const rows = file.name.toLowerCase().endsWith(".json")
+        ? (() => { const j = JSON.parse(text); return Array.isArray(j) ? j : (j.rows || j.data || [j]); })()
+        : parseCSV(text);
+      if(!rows.length) throw new Error("Файл не содержит строк данных");
+      handleRows(rows);
+    }catch(err){
+      alertBox(`⚠️ Не удалось прочитать файл: <b>${esc(err.message)}</b>. Убедитесь, что это корректный CSV/JSON в кодировке UTF-8.`);
+      $("dashSec").classList.add("hidden"); $("tableSec").classList.add("hidden"); $("exportBtn").classList.add("hidden");
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+/* --- Демо-данные --- */
+$("demoBtn").addEventListener("click", () => handleRows([
+  {document_name:"Презентация_брендбук_v3.pdf",category:"Маркетинг",owner:"А. Смирнова",confidentiality:"Публичный",access_type:"Публичный",permissions:"Просмотр",has_expiration:"Да",project_status:"В работе"},
+  {document_name:"Финмодель_клиента_Q3.xlsx",category:"Финансы",owner:"Д. Орлов",confidentiality:"Конфиденциальный",access_type:"Публичный",permissions:"Просмотр",has_expiration:"Да",project_status:"В работе"},
+  {document_name:"Бриф_кампании_осень.docx",category:"Маркетинг",owner:"М. Котова",confidentiality:"Внутренний",access_type:"Внешний",permissions:"Редактирование",has_expiration:"Да",project_status:"В работе"},
+  {document_name:"Договор_подряда_2026.pdf",category:"Юридические документы",owner:"И. Гусев",confidentiality:"Конфиденциальный",access_type:"Внешний",permissions:"Просмотр",has_expiration:"Нет",project_status:"В работе"},
+  {document_name:"Отчет_запуск_продукта.pptx",category:"Аналитика",owner:"Е. Лебедева",confidentiality:"Внутренний",access_type:"Внешний",permissions:"Просмотр",has_expiration:"Да",project_status:"Завершен"}
+]));
+
+/* --- Экспорт CSV --- */
+$("exportBtn").addEventListener("click", () => {
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  const head = "document_name,category,owner,rule_id,reason,risk_level,recommendation";
+  const csv = "\uFEFF" + [head, ...currentFindings.map(f =>
+    [f.document_name,f.category,f.owner,f.rule,f.reason,f.risk,f.rec].map(q).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+  a.download = "linkguard_report.csv"; a.click();
+  URL.revokeObjectURL(a.href);
+});
+</script>
+</body>
+</html>
